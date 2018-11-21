@@ -1,0 +1,101 @@
+---
+title: "Practical Machine learning Course Project"
+author: "yafei"
+date: "2018年11月21日"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Course Project
+
+
+```{r}
+library(lattice)
+library(ggplot2)
+library(caret)
+library(rattle)
+rm(list = ls())
+Train <- read.csv("pml-training.csv",header = TRUE)
+Test <- read.csv("pml-testing.csv",header=TRUE)
+```
+get some basic idea about the Train data set. 
+```{r}
+str(Train)
+```
+as I find there is a lot of NA values  on some obervation. We will excute those 
+variables in the data set and my final model.
+```{r}
+indColToRemove <- which(colSums(is.na(Train) |Train=="")>0.9*dim(Train)[1]) 
+Trainclean <- Train[,-indColToRemove]
+Trainclean <- Trainclean[,-c(1:7)]
+indColToRemove <- which(colSums(is.na(Test) |Test=="")>0.9*dim(Test)[1]) 
+TestClean <- Test[,-indColToRemove]
+TestClean <- TestClean[,-1]
+```
+after clean the dataset, I am going to creat a traning data set and test data set.
+```{r}
+set.seed(66666)
+inTrain <- createDataPartition(Trainclean$classe, p=0.7, list = FALSE)
+Training <- Trainclean[inTrain,]
+Testing <- Trainclean[-inTrain,]
+```
+In this class, I learned three different models: classification tree, random forest 
+and gradient boosting method. I will try all of them and I will also use the cross-validation to improve the efficienty of each model.
+## classification tree
+```{r}
+library(rpart)
+model_ct <- train(classe~., data = Training, method="rpart")
+```
+it takes very very long to get the result, so I am going ton control the computational nuances of the train function.
+```{r}
+library(parallel)
+library(foreach)
+library(iterators)
+library(doParallel)
+cluster <- makeCluster(detectCores() - 1)
+registerDoParallel(cluster)
+ctr1 <- trainControl(method = "cv", number=5, allowParallel = TRUE)
+model_ct <- train(classe~., data = Training, method="rpart", trControl=ctr1)
+fancyRpartPlot(model_ct$finalModel)
+trainresult <- predict(model_ct, newdata = Testing)
+result <- confusionMatrix(Testing$classe, trainresult)
+result$table
+result$overall
+```
+the accuracy is 0.479 which is very low. So the classification is not a good way to predict
+## random forests
+```{r}
+library(randomForest)
+model_rf <- train(classe~., data=Training, method="rf", trControl=ctr1)
+model_rf
+predict_rf <- predict(model_rf,Testing)
+```
+the predict accuracy is 0.991 which is realitvely high
+```{r}
+result_rf <- confusionMatrix(Testing$classe,predict_rf)
+result_rf$table
+```
+by the result, only a few variables are out of the random forests model
+
+## gradient boosting method
+```{r}
+model_gbm <- train(classe~., data=Training, method="gbm", trControl=ctr1)
+model_gbm
+predict_gbm <- predict(model_gbm, Testing)
+result_gbm <- confusionMatrix(Testing$classe,predict_gbm)
+result_gbm$table
+```
+the final result shows the accuracy is 0.95989 which is a little bit lower than the accuracy of the random forest model.
+
+## Model Selection
+It is very clear to ses that the Random Forest produces the model with the highest accuracy more than 99%.
+
+## Prediction
+```{r}
+final_pred <- predict(model_rf, Test, type="raw")
+final_pred
+```
+
